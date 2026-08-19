@@ -7,6 +7,7 @@ from embed_utils import embed
 from llm import generate_answer
 from bm25utils import build_bm25_index, get_top_bm25_ids
 from rrf_utils import reciprocal_rank_fusion
+from reranker import rerank
 
 
 bm25_state = {}
@@ -26,17 +27,20 @@ app = FastAPI(lifespan=lifespan)
 def ask(request: AskRequest):
     vector_results = collection.query(
         query_embeddings=[embed(request.question).tolist()],
-        n_results=10,
+        n_results=15,
     )
     vector_ranked_ids = vector_results["ids"][0]
 
     bm25_ranked_ids = get_top_bm25_ids(
-        request.question, bm25_state["index"], bm25_state["ids"], n=10
+        request.question, bm25_state["index"], bm25_state["ids"], n=15
     )
 
-    merged_ids = reciprocal_rank_fusion(vector_ranked_ids, bm25_ranked_ids)[:5]
+    merged_ids = reciprocal_rank_fusion(vector_ranked_ids, bm25_ranked_ids)[:15]
 
-    final_data = collection.get(ids=merged_ids, include=["documents", "metadatas"])
+    candidate_data = collection.get(ids=merged_ids, include=["documents"])
+    reranked_ids = rerank(request.question, candidate_data["ids"], candidate_data["documents"], top_n=5)
+
+    final_data = collection.get(ids=reranked_ids, include=["documents", "metadatas"])
     chunks = final_data["documents"]
     sources = [meta["source"] for meta in final_data["metadatas"]]
 

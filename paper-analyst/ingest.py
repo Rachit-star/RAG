@@ -1,5 +1,5 @@
 import os
-from pypdf import PdfReader
+from unstructured.partition.pdf import partition_pdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from db import collection
@@ -16,11 +16,8 @@ pdf_files = [f for f in os.listdir(papers_folder) if f.endswith(".pdf")]
 
 for filename in pdf_files:
     filepath = os.path.join(papers_folder, filename)
-    reader = PdfReader(filepath)
-
-    full_text = ""
-    for page in reader.pages:
-        full_text += page.extract_text()
+    elements = partition_pdf(filepath)
+    full_text = "\n\n".join([str(el) for el in elements])
 
     chunks = splitter.split_text(full_text)
 
