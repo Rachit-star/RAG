@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ChatMessage, { Message } from "@/components/ChatMessage";
 import TypingIndicator from "@/components/TypingIndicator";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { Paper } from "@/components/Sidebar";
 import { IconSearch, IconArrowUp, IconAlert, IconInfo } from "@/components/Icons";
 
 const SUGGESTIONS = [
@@ -12,8 +12,8 @@ const SUGGESTIONS = [
   "What are the key findings?",
 ];
 
-// Known papers in the system
-const PAPERS = [
+// Initial known papers (from before)
+const INITIAL_PAPERS: Paper[] = [
   { name: "paper.pdf", size: "1.5 MB" },
   { name: "resume.pdf", size: "112 KB" },
 ];
@@ -22,6 +22,8 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [papers, setPapers] = useState<Paper[]>(INITIAL_PAPERS);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
@@ -46,9 +48,38 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const handleUploadClick = useCallback(() => {
-    setToast("Upload endpoint not configured yet");
-  }, []);
+  const handleFileUpload = async (file: File) => {
+    setToast(`Uploading ${file.name}...`);
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/papers/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Upload failed (${res.status})`);
+      }
+
+      const data = await res.json();
+      
+      // Calculate a rough size string for display
+      const sizeStr = (file.size / 1024 / 1024).toFixed(1) + " MB";
+      
+      setPapers(prev => [...prev, { name: file.name, size: sizeStr }]);
+      setToast(`Success! Ingested ${data.chunks_ingested} chunks.`);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Upload failed";
+      setToast(`Error: ${errorMessage}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   async function handleSend(question?: string) {
     const q = (question || input).trim();
@@ -107,7 +138,11 @@ export default function Home() {
   return (
     <div className="app-shell">
       {/* Sidebar */}
-      <Sidebar papers={PAPERS} onUploadClick={handleUploadClick} />
+      <Sidebar 
+        papers={papers} 
+        onFileUpload={handleFileUpload} 
+        isUploading={isUploading} 
+      />
 
       {/* Main Panel */}
       <main className="main-panel">

@@ -1,23 +1,24 @@
+import os
+
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, HTTPException
+import shutil
+import os
 
 from models import AskRequest, AskResponse
 from db import collection
 from embed_utils import embed
 from llm import generate_answer
-from bm25utils import build_bm25_index, get_top_bm25_ids
+from bm25utils import rebuild_bm25_index, get_top_bm25_ids
 from rrf_utils import reciprocal_rank_fusion
 from reranker import rerank
+from hyde_utils import generate_hypothetical_answer
+from ingest_utils import ingest_pdf
 
-
-bm25_state = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    all_data = collection.get(include=["documents"])
-    bm25_state["chunks"] = all_data["documents"]
-    bm25_state["ids"] = all_data["ids"]
-    bm25_state["index"] = build_bm25_index(all_data["documents"])
+    rebuild_bm25_index()
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -25,15 +26,15 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest):
+    hypothetical = generate_hypothetical_answer(request.question)
+
     vector_results = collection.query(
-        query_embeddings=[embed(request.question).tolist()],
+        query_embeddings=[embed(hypothetical).tolist()],
         n_results=15,
     )
     vector_ranked_ids = vector_results["ids"][0]
 
-    bm25_ranked_ids = get_top_bm25_ids(
-        request.question, bm25_state["index"], bm25_state["ids"], n=15
-    )
+    bm25_ranked_ids = get_top_bm25_ids(request.question, n=15)
 
     merged_ids = reciprocal_rank_fusion(vector_ranked_ids, bm25_ranked_ids)[:15]
 
@@ -48,3 +49,18 @@ def ask(request: AskRequest):
     answer = generate_answer(request.question, context)
 
     return AskResponse(answer=answer, sources=list(set(sources)))
+
+
+@app.post("/papers/upload")
+async def upload_paper(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    save_path = os.path.join("papers", file.filename)
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    chunk_count = ingest_pdf(save_path, file.filename)
+    rebuild_bm25_index()
+
+    return {"filename": file.filename, "chunks_ingested": chunk_count}

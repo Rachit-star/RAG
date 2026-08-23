@@ -1,18 +1,37 @@
 "use client";
 
+import { useRef } from "react";
 import { IconBrain, IconDocument, IconUpload, IconZap } from "@/components/Icons";
 
-interface Paper {
+export interface Paper {
   name: string;
   size?: string;
 }
 
 interface SidebarProps {
   papers: Paper[];
-  onUploadClick: () => void;
+  onFileUpload: (file: File) => void;
+  isUploading?: boolean;
 }
 
-export default function Sidebar({ papers, onUploadClick }: SidebarProps) {
+export default function Sidebar({ papers, onFileUpload, isUploading = false }: SidebarProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onFileUpload(file);
+    }
+    // Reset input so the same file can be uploaded again if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <aside className="sidebar">
       {/* Brand */}
@@ -27,9 +46,22 @@ export default function Sidebar({ papers, onUploadClick }: SidebarProps) {
       <div className="sidebar-section">
         <span className="sidebar-label">Documents</span>
 
-        <button className="upload-button" onClick={onUploadClick}>
+        <input
+          type="file"
+          accept=".pdf"
+          style={{ display: "none" }}
+          ref={fileInputRef}
+          onChange={handleFileChange}
+        />
+        
+        <button 
+          className="upload-button" 
+          onClick={handleUploadClick}
+          disabled={isUploading}
+          style={{ opacity: isUploading ? 0.5 : 1, cursor: isUploading ? "not-allowed" : "pointer" }}
+        >
           <IconUpload size={14} />
-          Upload Document
+          {isUploading ? "Uploading..." : "Upload Document"}
         </button>
 
         <div className="paper-list">

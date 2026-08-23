@@ -1,4 +1,3 @@
-import os
 import fitz  # PyMuPDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -11,11 +10,7 @@ splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", ". ", " ", ""],
 )
 
-papers_folder = "papers"
-pdf_files = [f for f in os.listdir(papers_folder) if f.endswith(".pdf")]
-
-for filename in pdf_files:
-    filepath = os.path.join(papers_folder, filename)
+def ingest_pdf(filepath: str, filename: str) -> int:
     doc = fitz.open(filepath)
     full_text = "\n\n".join([page.get_text() for page in doc])
     doc.close()
@@ -30,4 +25,4 @@ for filename in pdf_files:
             ids=[f"{filename}_{i}"],
         )
 
-    print(f"Ingested {filename}: {len(chunks)} chunks")
+    return len(chunks)

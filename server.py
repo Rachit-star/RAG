@@ -7,6 +7,9 @@ Does NOT modify any files inside paper-analyst/.
 import sys
 import os
 
+# Disable Intel OneDNN/MKL-DNN to prevent PaddlePaddle crash on Windows
+os.environ["FLAGS_use_mkldnn"] = "0"
+
 # Add paper-analyst to the Python path so its imports resolve
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "paper-analyst"))
 
